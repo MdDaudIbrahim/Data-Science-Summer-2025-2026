@@ -15,15 +15,14 @@ output:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 set.seed(42)
 ```
-
 ```{r packages, message=FALSE, warning=FALSE}
 # Dynamically check, install, and load all required packages
 pkgs <- c("tidyverse", "skimr", "moments", "ggcorrplot", "knitr", "kableExtra", "corrplot", "e1071", "caret")
 for (pkg in pkgs) {
   if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
     install.packages(pkg, repos = "https://cran.r-project.org")
-    library(pkg, character.only = TRUE)
   }
+  library(pkg, character.only = TRUE)
 }
 ```
 
