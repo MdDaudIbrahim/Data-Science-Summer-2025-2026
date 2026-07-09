@@ -72,9 +72,9 @@ url <- "https://raw.githubusercontent.com/MdDaudIbrahim/Data-Science-Summer-2025
 local_path <- "DATASET/BanglaDine2024 Bangladeshi Restaurant Industry Dataset/Restaurant_Spatial-Analytical.csv"
 
 if (file.exists(local_path)) {
-  df <- read_csv(local_path, show_col_types = FALSE)
+  df <- readr::read_csv(local_path, show_col_types = FALSE)
 } else {
-  df <- read_csv(url, show_col_types = FALSE)
+  df <- readr::read_csv(url, show_col_types = FALSE)
 }
 
 # Filter for Bangladesh divisions only to clean foreign records
