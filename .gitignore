@@ -1,0 +1,9 @@
+# Ignore large files that exceed GitHub's 100MB limit
+DATASET/**/*.json
+DATASET/**/*.zip
+
+# Ignore R-specific files
+.Rhistory
+.RData
+.Rproj.user/
+.Ruserdata

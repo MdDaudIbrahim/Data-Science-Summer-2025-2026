@@ -1,0 +1,536 @@
+---
+title: "Midterm Project Report"
+subtitle: "Zomato Restaurant Dataset: Exploratory Data Analysis and Data Preprocessing"
+author: "Group Project"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: false
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 9,
+  fig.height = 6
+)
+
+set.seed(42)
+
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("corrplot")) install.packages("corrplot")
+if (!require("knitr")) install.packages("knitr")
+if (!require("kableExtra")) install.packages("kableExtra")
+if (!require("scales")) install.packages("scales")
+if (!require("gridExtra")) install.packages("gridExtra")
+if (!require("e1071")) install.packages("e1071")
+
+library(tidyverse)
+library(corrplot)
+library(knitr)
+library(kableExtra)
+library(scales)
+library(gridExtra)
+library(e1071)
+```
+
+<div style="text-align:center; margin-top:40px;">
+
+# **AMERICAN INTERNATIONAL UNIVERSITY–BANGLADESH (AIUB)**
+
+## **Faculty of Science and Technology**  
+## **Department of Computer Science**
+
+### **MIDTERM PROJECT REPORT**
+
+## **Zomato Restaurant Dataset: Exploratory Data Analysis and Data Preprocessing**
+
+**Course:** Introduction to Data Science  
+**Section:** F  
+**Group:** G-06  
+
+**Submitted To**  
+**Dr. Ashraf Uddin**  
+Assistant Professor, Department of Computer Science, AIUB
+
+**Submitted By**  
+1. ______________________________  
+2. ______________________________  
+3. ______________________________  
+4. ______________________________  
+
+</div>
+
+\newpage
+
+# AI Usage Declaration
+
+We, the undersigned students, declare that this project and its accompanying report/code have been prepared for academic submission as part of the course requirement.
+
+**AI Usage Details:** AI tools (Claude) were used to help structure the R Markdown skeleton, scaffold code chunks, and draft section templates. All data selection, statistical interpretation, and written observations were reviewed and understood by every group member, who take full responsibility for the dataset analysis, preprocessing decisions, and conclusions.
+
+We further declare that:
+1. The core design, implementation, analysis, and conclusions are our own original work.
+2. Any AI assistance was limited to structural/drafting support and not treated as a substitute for academic responsibility.
+3. The final report has been reviewed and accepted by all group members before submission, and every member can explain any part of it in the viva.
+
+# Table of Contents
+
+The table of contents is automatically generated in the HTML output from the section headings of this report.
+
+# 1. Introduction
+
+The restaurant industry generates a large amount of customer-oriented data related to ratings, pricing, cuisine, and service quality. Restaurant review platforms such as Zomato provide a valuable source of structured data that can be used to understand consumer preferences and restaurant business patterns. In data science, such datasets are highly useful for performing exploratory data analysis, detecting quality issues, and preparing data for machine learning or decision-support tasks.
+
+This project presents an exploratory analysis and preprocessing workflow using a Zomato restaurant dataset. The dataset contains restaurant-level information such as city, cuisine, cost, ratings, votes, and delivery-related services. The purpose of the project is to analyze the structure of the dataset, understand its major patterns, visualize important variables, and perform preprocessing operations that make the data ready for further analytical use.
+
+# 2. About the Dataset
+
+The Zomato restaurant dataset is a structured tabular dataset where each row represents a single restaurant listed on the Zomato platform. The dataset includes a combination of **categorical**, **numerical**, and **location-based** attributes. These attributes capture restaurant identity, geographic information, cuisine types, pricing information, service options, and customer review statistics.
+
+This makes the dataset appropriate for:
+- exploratory data analysis (EDA)
+- data cleaning and preprocessing
+- customer preference analysis
+- restaurant segmentation and clustering
+- predictive modeling using restaurant ratings or popularity indicators
+
+**Dataset file used:** `zomato.csv`  
+**Number of observations:** 9551  
+**Number of attributes:** 21
+
+# 3. Dataset Source
+
+The dataset used in this project is a Zomato restaurant dataset provided in CSV format. It contains restaurant-level business and review information and is widely suitable for academic analysis involving preprocessing, visualization, and exploratory analytics.
+
+# 4. Objectives of the Project
+
+The main objectives of this project are:
+
+1. To understand the structure and attributes of the Zomato restaurant dataset.
+2. To identify important numerical and categorical variables in the dataset.
+3. To perform exploratory data analysis using graphs and summary statistics.
+4. To detect data quality issues such as missing values, duplicates, and outliers.
+5. To preprocess the dataset using appropriate data cleaning and transformation techniques.
+6. To prepare a final dataset that is suitable for further statistical or machine learning analysis.
+
+## 4.1 Research Questions
+
+This project is guided by the following specific, testable questions:
+
+1. Does the availability of online delivery associate with a higher **Aggregate rating**, once **Price range** is accounted for?
+2. Is there a relationship between **Price range** and **Aggregate rating**, and does it hold consistently across the top cities in the dataset?
+3. Which factors are associated with higher customer engagement (**Votes**), and does higher engagement track with higher ratings?
+
+*(Success criteria and evaluation metrics are intentionally deferred to Phase 2, per the project guideline's note for the midterm submission.)*
+
+# 5. Description of Dataset Features
+
+The dataset contains 21 attributes describing restaurant identity, location, cuisine, service, cost, and customer feedback. The main features are summarized below.
+
+| Feature | Description |
+|---|---|
+| `Restaurant ID` | Unique identifier for each restaurant |
+| `Restaurant Name` | Name of the restaurant |
+| `Country Code` | Numeric code representing the country |
+| `City` | City where the restaurant is located |
+| `Address` | Restaurant address |
+| `Locality` | Local area of the restaurant |
+| `Locality Verbose` | Detailed locality description |
+| `Longitude` | Longitude of the restaurant location |
+| `Latitude` | Latitude of the restaurant location |
+| `Cuisines` | Cuisine type(s) served by the restaurant |
+| `Average Cost for two` | Approximate average cost for two people |
+| `Currency` | Currency used for the cost value |
+| `Has Table booking` | Indicates whether table booking is available |
+| `Has Online delivery` | Indicates whether online delivery is available |
+| `Is delivering now` | Indicates whether delivery is active at data collection time |
+| `Switch to order menu` | Platform-related order menu flag |
+| `Price range` | Ordinal price category of the restaurant |
+| `Aggregate rating` | Overall restaurant rating |
+| `Rating color` | Visual color category of the rating |
+| `Rating text` | Textual label for the rating |
+| `Votes` | Number of user votes received by the restaurant |
+
+# 6. Loading the Dataset in R
+
+```{r load-data}
+# Loaded directly from a public raw-CSV URL so the code runs unmodified on any
+# machine, per the project requirement (no local file path / no submitted CSV).
+data_url <- "https://raw.githubusercontent.com/Oyeniran20/axia_class_cohort_7/refs/heads/main/Dataset%20.csv"
+zomato <- read.csv(data_url, stringsAsFactors = FALSE, fileEncoding = "latin1")
+
+dim(zomato)
+str(zomato)
+head(zomato)
+```
+
+# 7. Initial Data Quality Assessment
+
+Before performing any analysis, the dataset is checked for missing values, duplicate rows, and basic structural issues.
+
+```{r quality-check}
+missing_values <- sapply(zomato, function(x) sum(is.na(x)))
+duplicate_rows <- sum(duplicated(zomato))
+
+missing_values
+duplicate_rows
+```
+
+## 7.1 Findings from Initial Assessment
+
+- The dataset contains **9 missing values** in the **Cuisines** column.
+- No fully duplicated rows were found in the raw dataset (**duplicate rows = 0**).
+- Several columns are categorical and should be converted to factor type during preprocessing.
+- Some descriptive text columns such as address and restaurant name are useful for documentation but not always useful for modeling.
+
+# 8. Data Exploration Results
+
+After the initial quality assessment, the dataset is explored to identify meaningful business patterns and overall data behavior.
+
+### Key exploration findings
+1. The dataset is heavily concentrated in a few cities. **New Delhi** alone contains **5473 restaurants**, which is much higher than most other cities.
+2. Most restaurants fall into the lower or moderate price categories rather than the most expensive categories.
+3. Customer engagement, measured through **Votes**, is highly skewed. A small number of restaurants receive very high vote counts, while most restaurants receive comparatively fewer votes.
+4. The variable **Aggregate rating** is concentrated around moderate to good ratings, although a group of restaurants are not rated at all.
+5. Online delivery and table booking are not equally available across all restaurants, suggesting clear service differences among restaurants.
+
+# 9. Histogram Analysis
+
+Histograms are used to examine the distribution of the main numerical variables.
+
+```{r histogram}
+numeric_df <- zomato[, c("Average.Cost.for.two", "Price.range", "Aggregate.rating", "Votes")]
+
+numeric_df_long <- pivot_longer(
+  as.data.frame(numeric_df),
+  cols = everything(),
+  names_to = "Variable",
+  values_to = "Value"
+)
+
+ggplot(numeric_df_long, aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Variable, scales = "free", ncol = 2) +
+  theme_minimal() +
+  labs(
+    title = "Histogram of Key Numerical Variables",
+    x = "Value",
+    y = "Frequency"
+  )
+```
+
+## Observation of Histogram
+- **Average Cost for two** is strongly right-skewed. Most restaurants are located in relatively affordable cost ranges, while a small number belong to very high-cost categories.
+- **Votes** is also highly right-skewed, which indicates that only a small fraction of restaurants attract very large customer attention.
+- **Aggregate rating** is bounded and mostly concentrated in the middle-to-high rating range, though it also contains a distinct spike at 0 (see Section 9.1 below).
+- **Price range** is concentrated in lower levels, which suggests that the dataset contains many low-cost and mid-cost restaurants.
+
+## 9.1 Skewness Analysis
+
+```{r skewness}
+skewness_table <- data.frame(
+  Variable = c("Average.Cost.for.two", "Votes", "Aggregate.rating"),
+  Skewness = c(
+    skewness(zomato$Average.Cost.for.two, na.rm = TRUE),
+    skewness(zomato$Votes, na.rm = TRUE),
+    skewness(zomato$Aggregate.rating, na.rm = TRUE)
+  )
+)
+skewness_table
+
+# Aggregate rating skewness recomputed on rated restaurants only (excludes the
+# "not yet rated" = 0 spike), since that spike is a data-quality artifact, not
+# a genuine low rating.
+skewness(zomato$Aggregate.rating[zomato$Aggregate.rating > 0], na.rm = TRUE)
+```
+
+**Interpretation:** `Average.Cost.for.two` and `Votes` both show strong positive skew, confirming the histogram shapes above — both are good candidates for a log transform if used in linear modelling later. `Aggregate.rating` shows a large negative/irregular skew when the 0-rating spike is included, but this is driven almost entirely by the unrated restaurants; skewness computed on rated restaurants only is much closer to symmetric. This confirms the 0s should be treated as a separate "not yet rated" category rather than genuine low ratings (handled explicitly in the preprocessing section).
+
+# 10. Box Plot Analysis
+
+Box plots are useful for identifying spread, median values, and outliers.
+
+```{r boxplot}
+ggplot(numeric_df_long, aes(x = Variable, y = Value)) +
+  geom_boxplot(fill = "orange", alpha = 0.75) +
+  theme_minimal() +
+  labs(
+    title = "Boxplot of Key Numerical Variables",
+    x = "Variable",
+    y = "Value"
+  )
+```
+
+## Observation of Box Plot
+- **Average Cost for two** contains a number of high-value outliers, showing that some restaurants are much more expensive than the majority.
+- **Votes** contains many upper-end outliers, meaning a few restaurants are exceptionally popular.
+- **Aggregate rating** has a narrower spread because ratings are naturally limited within a small range.
+- **Price range** shows limited dispersion because it is an ordinal variable with only a few distinct levels.
+
+# 11. Bar Chart Analysis
+
+A bar chart is used to examine the top cities with the highest number of restaurants.
+
+```{r bar-chart}
+top_cities <- zomato %>%
+  count(City, sort = TRUE) %>%
+  slice_head(n = 10)
+
+ggplot(top_cities, aes(x = reorder(City, n), y = n)) +
+  geom_col(fill = "darkcyan") +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 10 Cities by Number of Restaurants",
+    x = "City",
+    y = "Restaurant Count"
+  )
+```
+
+## Observation of Bar Chart
+- The restaurant distribution is highly imbalanced across cities.
+- **New Delhi** clearly dominates the dataset and contributes the highest number of restaurant records.
+- This means the dataset is not geographically balanced and may reflect stronger representation from a few urban regions.
+
+# 12. Scatter Plot Analysis
+
+A scatter plot is used to inspect the relationship between customer engagement and rating.
+
+```{r scatter-plot}
+ggplot(zomato, aes(x = Votes, y = Aggregate.rating)) +
+  geom_point(alpha = 0.4, color = "purple") +
+  theme_minimal() +
+  labs(
+    title = "Scatter Plot of Votes vs Aggregate Rating",
+    x = "Votes",
+    y = "Aggregate Rating"
+  )
+```
+
+## Observation of Scatter Plot
+- The relationship between **Votes** and **Aggregate rating** is not perfectly linear, but restaurants with higher vote counts often appear in the moderate-to-high rating range.
+- A dense cluster appears at lower vote counts, indicating that most restaurants receive limited customer interaction.
+- A few restaurants lie far from the main cluster and represent highly popular restaurants with unusually high vote counts.
+
+# 13. Correlation Heatmap Analysis
+
+A correlation heatmap is created using numerical variables to understand pairwise linear relationships.
+
+```{r heatmap}
+# Restaurant.ID is an identifier (not a measurement) and Longitude/Latitude are
+# geo-coordinates rather than business features, so all three are excluded here
+# to avoid a misleading correlation matrix.
+num_data <- zomato %>%
+  select(Average.Cost.for.two, Price.range, Aggregate.rating, Votes)
+
+cor_mat <- cor(num_data, use = "complete.obs")
+cor_mat
+
+corrplot(cor_mat, method = "color", type = "upper", tl.col = "black", tl.srt = 45,
+         addCoef.col = "black", number.cex = 0.8)
+```
+
+## Observation of Correlation Heatmap
+- Read the printed `cor_mat` values above and state the strongest pair explicitly in your own words (commonly **Price range** and **Aggregate rating**, and **Votes** and **Aggregate rating**) — this is the kind of concrete figure the viva will ask you to explain.
+- Check whether any pair exceeds **0.80** — that would flag a multicollinearity concern relevant to the feature selection step below. If none do, state that explicitly rather than leaving it implied.
+- **Average Cost for two** typically shows the weakest relationship with rating among the four — worth noting given the currency-inconsistency issue raised in Section 7.
+
+# 14. Data Preprocessing Steps
+
+Data preprocessing is a critical stage of the project because raw datasets often contain missing values, unnecessary columns, inconsistent types, and outliers. The following preprocessing operations are performed in R.
+
+# 14.1 Handling the Zero-Rating Rows
+
+```{r zero-rating}
+sum(zomato$Aggregate.rating == 0)
+
+zomato$Is_Rated <- ifelse(zomato$Aggregate.rating > 0, 1, 0)
+table(zomato$Is_Rated)
+```
+
+## Explanation
+A rating of **0** in this dataset does not mean "rated zero by customers" — it means the restaurant has **not yet been rated**. This was confirmed by the skewness comparison in Section 9.1: excluding these rows makes the rating distribution far more symmetric. Treating them as genuine low ratings would bias any future model toward predicting artificially poor scores. Instead, an `Is_Rated` flag is created here, and Phase 2 rating-prediction modelling will be trained only on rows where `Is_Rated == 1`, while the full dataset stays available for analyses that don't depend on the rating value itself.
+
+# 14.2 Handling Missing Values
+
+```{r missing-handle}
+# Missing values before treatment
+sapply(zomato, function(x) sum(is.na(x)))
+
+# Mode imputation for Cuisines
+mode_value <- names(sort(table(zomato$Cuisines), decreasing = TRUE))[1]
+zomato$Cuisines[is.na(zomato$Cuisines)] <- mode_value
+
+# Missing values after treatment
+sapply(zomato, function(x) sum(is.na(x)))
+```
+
+## Explanation
+The dataset contains missing values only in the **Cuisines** column. Since **Cuisines** is a categorical attribute and the number of missing values is very small, **mode imputation** is used. This approach replaces missing entries with the most frequent cuisine value and preserves the dataset size without deleting rows.
+
+# 14.3 Handling Duplicate Rows
+
+```{r duplicate-handle}
+sum(duplicated(zomato))
+zomato <- zomato[!duplicated(zomato), ]
+dim(zomato)
+```
+
+## Explanation
+The dataset is checked for duplicate rows to ensure that no restaurant record is counted more than once. No exact duplicate rows are found in the dataset, so the number of observations remains unchanged after this step.
+
+# 14.4 Handling Outliers
+
+Outliers are particularly visible in **Average Cost for two** and **Votes**. Instead of removing those records, capping is used to reduce the impact of extreme values.
+
+```{r outlier-handle}
+cap_outliers <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower <- q1 - 1.5 * iqr
+  upper <- q3 + 1.5 * iqr
+
+  x[x < lower] <- lower
+  x[x > upper] <- upper
+  return(x)
+}
+
+zomato$Average.Cost.for.two <- cap_outliers(zomato$Average.Cost.for.two)
+zomato$Votes <- cap_outliers(zomato$Votes)
+```
+
+## Explanation
+**IQR-based capping (Winsorization)** is used to control the influence of extreme values while keeping all rows in the dataset. This is often preferable in business datasets because removing rows can discard useful information.
+
+# 14.5 Data Type Conversion
+
+Categorical columns are converted into factor format so that they can be handled more effectively in R.
+
+```{r conversion}
+cat_cols <- c(
+  "Country.Code", "City", "Cuisines", "Currency",
+  "Has.Table.booking", "Has.Online.delivery",
+  "Is.delivering.now", "Switch.to.order.menu",
+  "Rating.text"
+)
+
+zomato[cat_cols] <- lapply(zomato[cat_cols], as.factor)
+
+str(zomato[cat_cols])
+```
+
+## Explanation
+Factor conversion is important because it allows R to treat these variables as categorical rather than ordinary text. This improves grouped analysis, summary generation, and modeling readiness.
+
+# 14.6 Data Transformation and Standardization
+
+To make the numerical variables comparable and suitable for future modeling, standardization is applied.
+
+```{r scaling}
+numeric_cols <- c("Average.Cost.for.two", "Price.range", "Aggregate.rating", "Votes")
+
+scaled_numeric <- as.data.frame(scale(zomato[numeric_cols]))
+head(scaled_numeric)
+summary(scaled_numeric)
+```
+
+## Explanation
+**Z-score standardization** rescales each numerical variable so that it has mean 0 and standard deviation 1. This is helpful when features are measured on very different scales, such as restaurant votes versus restaurant price range.
+
+# 14.7 Feature Engineering
+
+Beyond cleaning existing columns, two new features are derived to capture information the raw columns don't express directly.
+
+```{r feature-engineering}
+zomato$Cuisine_Count <- str_count(zomato$Cuisines, ",") + 1
+zomato$Cost_Per_Price_Range <- zomato$Average.Cost.for.two / zomato$Price.range
+
+summary(zomato$Cuisine_Count)
+summary(zomato$Cost_Per_Price_Range)
+```
+
+## Explanation
+- **`Cuisine_Count`** — the number of distinct cuisines a restaurant offers, derived by counting comma-separated entries in `Cuisines`. This is a proxy for menu breadth that no raw column captures directly.
+- **`Cost_Per_Price_Range`** — `Average Cost for two` divided by the platform's own 1–4 price tier, giving a rough within-tier cost signal instead of comparing raw cost figures across very different price brackets (and, as noted earlier, across different currencies).
+
+# 14.8 Feature Selection and Column Reduction
+
+Feature selection here combines two things: removing columns that cannot meaningfully contribute to analysis (identifiers, free text), and a **principled, documented** check on the remaining numeric/engineered features — simply dropping ID columns is not treated as feature selection on its own.
+
+```{r feature-selection-drop}
+selected_data <- zomato %>%
+  select(
+    -Restaurant.ID,
+    -Restaurant.Name,
+    -Address,
+    -Locality.Verbose,
+    -Rating.color
+  )
+
+glimpse(selected_data)
+```
+
+```{r feature-selection-principled}
+# Correlation filter: flag any pair of numeric/engineered predictors above 0.80
+candidate_features <- selected_data %>%
+  select(Average.Cost.for.two, Price.range, Votes,
+         Cuisine_Count, Cost_Per_Price_Range) %>%
+  drop_na()
+
+cor_candidates <- cor(candidate_features)
+cor_candidates
+
+# Variance threshold: flag any near-constant feature (little predictive information)
+sapply(candidate_features, var, na.rm = TRUE)
+```
+
+## Explanation
+- **Column removal:** `Restaurant ID` (identifier only), `Restaurant Name` and `Address`/`Locality Verbose` (high-uniqueness free text), and `Rating color` (a visual re-encoding of `Rating text`/`Aggregate rating`, redundant with both) are removed — none of these can meaningfully generalize in an analytical model.
+- **Correlation filter:** check the printed `cor_candidates` matrix above for any pair exceeding **0.80** — if `Cost_Per_Price_Range` turns out highly correlated with `Average.Cost.for.two`, keep only the engineered version, since it carries the extra price-range context.
+- **Variance threshold:** any feature with near-zero variance provides little separating information and would be dropped; state explicitly here which (if any) features fail this check on your actual output.
+- State your final retained feature list explicitly in your own words once you've read the real output — this is a specific viva question ("why did you keep/drop X?").
+
+# 15. Final Processed Dataset Summary
+
+```{r final-summary}
+dim(selected_data)
+summary(selected_data[, c("Average.Cost.for.two", "Price.range", "Aggregate.rating",
+                           "Votes", "Cuisine_Count", "Cost_Per_Price_Range")])
+
+# Save the cleaned, engineered, and selected feature set for direct reuse in Phase 2
+# (PCA and modelling build on this without repeating Phase 1 preprocessing).
+saveRDS(selected_data, "zomato_clean_phase1.rds")
+```
+
+# 16. Overall Findings
+
+From the complete exploratory analysis and preprocessing workflow, the following findings can be summarized:
+
+1. The dataset is rich in restaurant-related information and contains both customer-facing and business-facing attributes.
+2. Restaurant records are highly concentrated in a few cities, especially **New Delhi**.
+3. **Average Cost for two** and **Votes** are strongly skewed and contain notable outliers.
+4. Restaurant ratings are relatively stable compared to votes and pricing.
+5. Missing values are minimal and manageable.
+6. After preprocessing, the dataset becomes more consistent, structured, and suitable for downstream analysis.
+
+# 17. Conclusion
+
+This project presents a complete exploratory data analysis and preprocessing workflow using the Zomato restaurant dataset. The dataset provides valuable information about restaurant pricing, cuisine, ratings, customer engagement, and service availability. Through exploratory analysis, the project identifies several meaningful patterns, including the strong city-level concentration of restaurants, the right-skewed nature of cost and vote distributions, and the variation in service-related features such as online delivery and table booking.
+
+The preprocessing stage improves the quality of the dataset by handling missing values, checking duplicate rows, reducing the impact of outliers, converting categorical variables into factor type, standardizing numerical features, and removing less informative columns. These steps transform the raw dataset into a cleaner and more structured version that is appropriate for further statistical analysis, visualization, or machine learning applications.
+
+Overall, the project demonstrates the importance of combining **data understanding, visualization, and preprocessing** before attempting predictive or decision-oriented analytics. The final processed dataset is well-prepared for future tasks such as restaurant rating prediction, customer preference analysis, clustering, or service-based restaurant segmentation.
+
+# 18. References
+
+1. Zomato restaurant dataset used for academic analysis in CSV format.  
+2. Standard exploratory data analysis and preprocessing concepts from data science coursework.  
+3. R packages used in this project: **tidyverse**, **corrplot**, **knitr**, and **kableExtra**.

@@ -1,0 +1,437 @@
+---
+title: "Predicting High-Potential Restaurant Locations in Bangladesh"
+subtitle: "Semester Project (Phase 1: Midterm Report)"
+author: "Group Project (Group G-06, Section F)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+set.seed(42)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+# Dynamically check, install, and load all required packages
+pkgs <- c("tidyverse", "skimr", "moments", "ggcorrplot", "knitr", "kableExtra", "corrplot", "e1071", "caret")
+for (pkg in pkgs) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cran.r-project.org")
+    library(pkg, character.only = TRUE)
+  }
+}
+```
+
+---
+
+# Section 1 — Problem Framing
+
+## 1.1 Domain Context and Dataset Background
+The culinary industry in Bangladesh has experienced exponential growth over the past decade, driven by rapid urbanization, a rising middle class, and changing lifestyle patterns. However, setting up a restaurant requires significant capital, and location choice is the single most critical factor in determining business survival and profitability. Poor geographic positioning often leads to business failure, even if the food quality and service are exceptional. 
+
+This project addresses this critical challenge by leveraging spatial data and machine learning to identify high-potential restaurant locations. We utilize the **BanglaDine2024 Bangladeshi Restaurant Industry Dataset**, which is a comprehensive geospatial dataset scraped from Google Maps. It contains detailed features on 58,376 restaurants, capturing geographic coordinates (`lat`, `lng`), administrative divisions, business types, customer ratings, review counts, operating hours, and service options (such as delivery, takeaway, and wheelchair accessibility). 
+
+By analyzing these features, this project aims to build a predictive framework that can assist entrepreneurs and investors in identifying high-potential locations for new restaurants.
+
+## 1.2 Analytical Questions
+To guide our analysis and modeling, we formulate the following research questions:
+
+1. **How do spatial characteristics (geographic coordinates and administrative divisions) influence the likelihood of a restaurant location becoming high-potential?** 
+   *We will explore if specific geographic coordinates or regional divisions (e.g., Dhaka or Chittagong) show a significantly higher density of successful restaurants.*
+2. **How does the diversity of services (e.g., delivery, takeaway, dine-in) and accessibility features impact the popularity and rating of a location?** 
+   *We will analyze whether offering multiple service channels and facilities acts as a key differentiator for business success.*
+3. **What is the relationship between competitor density within an area and individual restaurant success?** 
+   *We will test whether high restaurant density represents a lucrative food hub (agglomeration effect) or a saturated market that reduces potential.*
+
+## 1.3 Success Criteria and Evaluation Metrics
+*(Skip it for mid-term per faculty instructions)*
+
+## 1.4 Dataset Justification
+The BanglaDine2024 dataset is ideal for addressing our analytical questions for several reasons:
+* **Geospatial Richness:** It provides exact latitude and longitude coordinates for all listings, allowing us to perform distance-based clustering and regional density calculations.
+* **Volume and Representation:** With over 51,000 clean records across all 8 divisions of Bangladesh, it represents the entire country's restaurant ecosystem rather than a localized sample.
+* **Direct Business Indicators:** It includes ratings and review counts directly from Google Maps, which serve as excellent proxies for customer satisfaction and foot traffic volume.
+
+---
+
+# Section 2 — Data Acquisition & Initial Inspection
+
+## 2.1 Loading the Data
+
+To comply with the requirement of loading from a public URL while ensuring immediate local reproducibility, the chunk below uses a dual-loading mechanism. It checks for the local file first; if not found, it falls back to the public repository URL.
+
+```{r load-data}
+# Public URL (replace this with your uploaded github raw URL)
+url <- "https://raw.githubusercontent.com/username/repo/main/DATASET/BanglaDine2024%20Bangladeshi%20Restaurant%20Industry%20Dataset/Restaurant_Spatial-Analytical.csv"
+
+# Local path for immediate local knitting
+local_path <- "DATASET/BanglaDine2024 Bangladeshi Restaurant Industry Dataset/Restaurant_Spatial-Analytical.csv"
+
+if (file.exists(local_path)) {
+  df <- read_csv(local_path, show_col_types = FALSE)
+} else {
+  df <- read_csv(url, show_col_types = FALSE)
+}
+
+# Filter for Bangladesh divisions only to clean foreign records
+bd_divisions <- c("Dhaka", "Chittagong", "Khulna", "Rajshahi", "Rangpur", "Sylhet", "Barisal", "Mymensingh")
+df <- df %>% 
+  filter(division %in% bd_divisions)
+
+# Preview the first few rows
+head(df, 5)
+```
+
+**Observation:** The first few rows reveal that the dataset contains a rich set of location attributes (`lat`, `lng`, `division`, `address`), customer metrics (`rating`, `user_ratings_total`), and business properties (`types`, `Service options`, `Amenities`, `Atmosphere`). There are missing values in columns like `rating` and `user_ratings_total` that represent unrated listings, which we will address during preprocessing.
+
+## 2.2 Dimensions and Variable Types
+
+```{r inspect}
+cat("Total Rows (Bangladesh Subset):", nrow(df), "\n")
+cat("Total Columns:", ncol(df), "\n")
+glimpse(df %>% select(name, lat, lng, division, types, rating, user_ratings_total, `Service options`))
+```
+
+**Observation:** The filtered Bangladesh subset contains **51,277 rows** and **211 columns** (mainly due to hourly popularity percentage variables). The coordinates are correctly stored as double-precision floats (`dbl`), while categorical attributes like `types` and `division` are characters (`chr`). 
+
+## 2.3 Summary Statistics
+
+We run a summary on the primary numerical and categorical predictors using the `skimr` package.
+
+```{r summary}
+df %>% 
+  select(lat, lng, rating, user_ratings_total, types, division) %>% 
+  skim()
+```
+
+**Observation:** 
+* `rating` has a mean of 4.05 and a median of 4.1, indicating that reviews skew positive.
+* `user_ratings_total` is extremely right-skewed, ranging from 1 to 27,484, with a median of 5. This indicates a few massive restaurants dominate the review counts, and a log transform will be required.
+* There are 11,868 missing values in both `rating` and `user_ratings_total`. Since these are the basis of our target variable, we will remove them in the preprocessing section to avoid target fabrication.
+
+## 2.4 Data Provenance
+
+* **Source:** Google Maps API extraction (BanglaDine2024 dataset).
+* **Collection method:** Web-scraping and API queries of food-related establishments across Bangladesh divisions in late 2024.
+* **Known limitations:** 
+  1. The dataset contains some unrated restaurants (new or very small) which have missing rating fields.
+  2. The data relies on Google Maps listings, which may overrepresent urban hubs (e.g., Dhaka and Chittagong) where business owners are more likely to list their shops online.
+
+---
+
+# Section 3 — Exploratory Data Analysis (EDA)
+
+First, we define our target variable **`is_high_potential`** to anchor our EDA. A restaurant is defined as high-potential (`1`) if its rating is $\ge 4.0$ and its total review volume is $\ge$ the median of all active reviewed restaurants.
+
+```{r define-target}
+# Determine median review count of active restaurants
+median_reviews <- median(df$user_ratings_total, na.rm = TRUE)
+
+df <- df %>%
+  mutate(is_high_potential = ifelse(!is.na(rating) & rating >= 4.0 & user_ratings_total >= median_reviews, 1, 0))
+```
+
+## 3.1 Univariate Analysis — Numeric Variables
+
+We visualize the distribution of ratings and reviews (on a log-10 scale due to the skewness).
+
+```{r univariate-numeric, fig.width=10, fig.height=5}
+p1 <- ggplot(df, aes(x = rating)) +
+  geom_histogram(bins = 20, fill = "#0F6E56", colour = "white", alpha = 0.8) +
+  labs(title = "Distribution of Restaurant Ratings", x = "Rating", y = "Count") +
+  theme_minimal()
+
+p2 <- ggplot(df, aes(x = user_ratings_total)) +
+  geom_histogram(bins = 30, fill = "#534AB7", colour = "white", alpha = 0.8) +
+  scale_x_log10(labels = scales::comma) +
+  labs(title = "Distribution of Review Counts (Log Scale)", x = "Reviews (Log10)", y = "Count") +
+  theme_minimal()
+
+gridExtra::grid.arrange(p1, p2, ncol = 2)
+```
+
+**Observation:** The restaurant ratings are highly left-skewed, showing that the majority of rated restaurants receive between 3.5 and 4.8 stars. The review counts (`user_ratings_total`) exhibit a massive log-normal distribution, indicating that a small fraction of restaurants attract the vast majority of customer traffic and online engagement.
+
+## 3.2 Univariate Analysis — Categorical Variables
+
+We analyze the distribution of restaurants across the 8 administrative divisions of Bangladesh.
+
+```{r univariate-categorical, fig.width=8, fig.height=4}
+df %>%
+  count(division) %>%
+  ggplot(aes(x = reorder(division, n), y = n, fill = division)) +
+  geom_col(alpha = 0.85) +
+  coord_flip() +
+  scale_fill_viridis_d(option = "mako") +
+  labs(title = "Restaurant Counts by Administrative Division", x = "Division", y = "Number of Restaurants") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+**Observation:** Dhaka division contains the largest concentration of restaurants (nearly 20,000), followed closely by Chittagong division (over 11,500). Mymensingh has the lowest restaurant density. This spatial imbalance confirms that urbanization heavily influences Google Maps listing density.
+
+## 3.3 Skewness Analysis
+
+```{r skewness}
+skew_vals <- df %>%
+  select(rating, user_ratings_total, lat, lng) %>%
+  summarise(across(everything(), ~round(e1071::skewness(., na.rm = TRUE), 3))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Skewness") %>%
+  mutate(
+    Direction = case_when(
+      Skewness >  1   ~ "Highly right-skewed",
+      Skewness >  0.5 ~ "Moderately right-skewed",
+      Skewness < -1   ~ "Highly left-skewed",
+      Skewness < -0.5 ~ "Moderately left-skewed",
+      TRUE            ~ "Approximately symmetric"
+    )
+  ) %>%
+  arrange(desc(abs(Skewness)))
+
+kable(skew_vals, caption = "Skewness of Numeric Variables") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+**Observation:** 
+* `user_ratings_total` has an extremely high positive skewness (~16.6), confirming a heavy-tailed distribution that warrants a log transform in the preprocessing stage.
+* `rating` is moderately left-skewed (-0.975) because low ratings are relatively rare.
+* Coordinates (`lat` and `lng`) are approximately symmetric as they reflect geographical boundaries.
+
+## 3.4 Bivariate Analysis — Predictors vs. Target
+
+We analyze how the proportion of High-Potential locations varies across different administrative divisions.
+
+```{r bivariate, fig.width=9, fig.height=5}
+df %>%
+  group_by(division) %>%
+  summarise(high_potential_pct = mean(is_high_potential) * 100) %>%
+  ggplot(aes(x = reorder(division, high_potential_pct), y = high_potential_pct, fill = division)) +
+  geom_col(alpha = 0.85) +
+  coord_flip() +
+  scale_fill_viridis_d(option = "plasma") +
+  labs(title = "Percentage of High-Potential Restaurants by Division",
+       x = "Division", y = "High-Potential Percentage (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+**Observation:** Sylhet division leads with the highest percentage of high-potential locations (exceeding 60%), followed by Chittagong and Dhaka. This suggests that tourist attraction zones (like Sylhet and Cox's Bazar in Chittagong) have a higher ratio of active, highly-rated restaurants.
+
+## 3.5 Correlation Analysis
+
+We calculate the correlation between primary numeric variables.
+
+```{r correlation, fig.width=8, fig.height=6}
+# Clean numeric data for correlation check
+cor_data <- df %>%
+  select(rating, user_ratings_total, lat, lng) %>%
+  drop_na()
+
+cor_matrix <- cor(cor_data, use = "complete.obs")
+
+ggcorrplot(cor_matrix,
+           method = "circle",
+           type   = "lower",
+           lab    = TRUE,
+           lab_size = 4,
+           colors = c("#D85A30", "white", "#0F6E56"),
+           title  = "Correlation Heatmap of Basic Numeric Variables") +
+  theme_minimal()
+```
+
+**Observation:** There is a weak positive correlation between `rating` and `user_ratings_total` (r = 0.1), suggesting that popular restaurants are slightly better rated. Coordinates show no meaningful linear correlation with rating.
+
+## 3.6 Notable Finding: Spatial Hotspots in Dhaka and Chittagong
+
+Geographical scatter plot of restaurants in the two major commercial divisions (Dhaka and Chittagong), colored by location status.
+
+```{r notable-finding, fig.width=8, fig.height=6}
+df %>%
+  filter(division %in% c("Dhaka", "Chittagong")) %>%
+  ggplot(aes(x = lng, y = lat, color = factor(is_high_potential))) +
+  geom_point(alpha = 0.3, size = 1) +
+  scale_color_manual(values = c("#D85A30", "#0F6E56"), labels = c("Low Potential", "High Potential")) +
+  labs(title = "Geospatial Clustering of Restaurant Locations",
+       x = "Longitude", y = "Latitude", color = "Location Status") +
+  theme_minimal()
+```
+
+**Observation:** The plot reveals clear, dense coordinate clusters indicating commercial restaurant hubs (Dhaka metropolitan area and Chittagong city center/coastal belt). The high-potential restaurants (green) are densely packed together, supporting the **agglomeration theory**—restaurants do better when clustered near existing food markets, rather than in isolation.
+
+---
+
+# Section 4 — Preprocessing & Feature Engineering
+
+## 4.1 Missing Value Treatment
+
+```{r missing-values}
+# Check missing values per column
+missing_summary <- df %>%
+  select(name, lat, lng, division, types, rating, user_ratings_total) %>%
+  summarise(across(everything(), ~sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "Missing_Count") %>%
+  mutate(Missing_Pct = round(Missing_Count / nrow(df) * 100, 1)) %>%
+  filter(Missing_Count > 0)
+
+kable(missing_summary, caption = "Missing Values Summary") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE)
+```
+
+We remove rows with missing `rating` and `user_ratings_total` because they lack review data. Imputing these would artificially fabricate labels.
+
+```{r impute}
+# Remove rows missing reviews/ratings
+df <- df %>% 
+  filter(!is.na(rating) & !is.na(user_ratings_total))
+
+# For missing business names, fill with 'Unknown'
+df$name[is.na(df$name)] <- "Unknown"
+```
+
+**Decision:** We drop records missing `rating` and `user_ratings_total`. This ensures our machine learning model trains only on verified customer data. Missing names are filled with "Unknown" because they are text metadata and do not affect numeric computations.
+
+## 4.2 Outlier Detection and Treatment
+
+We visualize review counts to spot extreme outliers.
+
+```{r outliers, fig.width=8, fig.height=4}
+df %>%
+  ggplot(aes(y = user_ratings_total, x = "")) +
+  geom_boxplot(fill = "#E1F5EE", colour = "#0F6E56", outlier.colour = "#D85A30") +
+  labs(title = "Outlier Boxplot for Review Counts") +
+  theme_minimal()
+```
+
+**Decision:** The boxplot shows massive outliers for extremely popular restaurants. Removing these would discard valuable positive examples of high success. Instead, we apply a log-transform: $y = \log(x + 1)$ to stabilize variance and bound the outliers.
+
+```{r transform-outliers}
+# Apply log transform to review counts
+df <- df %>%
+  mutate(user_ratings_log = log(user_ratings_total + 1))
+```
+
+## 4.3 Categorical Encoding
+
+We group the rare restaurant types into 7 major categories and one-hot encode them, along with the administrative divisions.
+
+```{r encoding}
+# Group types
+df <- df %>%
+  mutate(types_grouped = case_when(
+    types %in% c("Restaurant", "Family restaurant", "Asian restaurant") ~ "Standard_Family",
+    types %in% c("Fast food restaurant", "Pizza restaurant", "Hamburger restaurant") ~ "Fast_Food",
+    types == "Bangladeshi restaurant" ~ "Traditional_BD",
+    types %in% c("Chinese restaurant", "Korean restaurant", "Japanese restaurant", "Thai restaurant") ~ "East_Asian",
+    types %in% c("Sweets and dessert buffet", "Bakery", "Cafe", "Coffee shop", "Ice cream shop") ~ "Cafe_Dessert",
+    types %in% c("Biryani restaurant", "Kebab shop") ~ "Biryani_Kebab",
+    TRUE ~ "Other_Specialty"
+  ))
+
+# Manual One-Hot Encoding for Divisions
+divisions <- unique(df$division)
+for (div in divisions) {
+  col_name <- paste0("div_", gsub(" ", "_", div))
+  df[[col_name]] <- ifelse(df$division == div, 1, 0)
+}
+
+# Manual One-Hot Encoding for Grouped Types
+types_cats <- unique(df$types_grouped)
+for (t_cat in types_cats) {
+  col_name <- paste0("type_", t_cat)
+  df[[col_name]] <- ifelse(df$types_grouped == t_cat, 1, 0)
+}
+```
+
+**Decision:** We perform one-hot encoding for administrative divisions and grouped restaurant categories. This converts categorical labels into numeric matrices ready for machine learning algorithms like logistic regression or random forests.
+
+## 4.4 Feature Engineering
+
+We engineer two spatial and service-based features:
+1. `competitor_density`: Count of competitors listed in the same administrative division.
+2. `service_diversity`: The total count of service options offered by the restaurant (derived from comma-separated `Service options` string).
+
+```{r feature-engineering}
+# Feature 1: Competitor Density
+df <- df %>%
+  group_by(division) %>%
+  mutate(competitor_density = n()) %>%
+  ungroup()
+
+# Feature 2: Service Diversity
+df <- df %>%
+  mutate(service_diversity = ifelse(is.na(`Service options`), 0, str_count(`Service options`, ",") + 1))
+
+# Preview engineered features
+df %>% 
+  select(name, division, competitor_density, `Service options`, service_diversity) %>% 
+  head(5)
+```
+
+**Justification:**
+* **`competitor_density`:** Helps the machine learning model identify division-level market size and potential agglomeration vs saturation patterns.
+* **`service_diversity`:** A higher count of service options indicates an adaptable business model (e.g. delivery + drive-through + dine-in), which increases customer accessibility and ratings.
+
+## 4.5 Numeric Scaling
+
+We scale and standardize the primary coordinates and our engineered numeric predictors to mean 0 and standard deviation 1.
+
+```{r scaling}
+# Predictors to scale
+numeric_predictors <- c("lat", "lng", "competitor_density", "service_diversity")
+
+df[numeric_predictors] <- scale(df[numeric_predictors])
+```
+
+**Decision:** Scaling coordinates and numeric metrics prevents distance-based algorithms (like k-NN or regularized regression) from biasing towards features with naturally larger magnitudes.
+
+## 4.6 Feature Selection
+
+We remove near-zero variance features and highly correlated predictors to prevent multicollinearity.
+
+```{r feature-selection}
+# Extract candidate feature set for Phase 2
+features_to_check <- df %>%
+  select(lat, lng, competitor_density, service_diversity, 
+         starts_with("div_"), starts_with("type_"))
+
+# 1. Variance Filter: near-zero variance
+nzv_metrics <- nearZeroVar(features_to_check, saveMetrics = TRUE)
+low_variance_vars <- rownames(nzv_metrics[nzv_metrics$nzv == TRUE, ])
+
+cat("Near-Zero Variance features removed:", ifelse(length(low_variance_vars) == 0, "None", paste(low_variance_vars, collapse = ", ")), "\n")
+
+# 2. Correlation Filter: remove predictors with r > 0.85
+cor_mat_features <- cor(features_to_check %>% select(-any_of(low_variance_vars)), use = "complete.obs")
+high_cor_indices <- findCorrelation(cor_mat_features, cutoff = 0.85)
+high_cor_vars <- colnames(cor_mat_features)[high_cor_indices]
+
+cat("Highly correlated features removed:", ifelse(length(high_cor_vars) == 0, "None", paste(high_cor_vars, collapse = ", ")), "\n")
+```
+
+```{r final-dataset}
+# Build final clean dataset for Phase 2
+df_clean <- df %>%
+  select(is_high_potential, lat, lng, competitor_density, service_diversity, 
+         starts_with("div_"), starts_with("type_")) %>%
+  select(-any_of(c(low_variance_vars, high_cor_vars)))
+
+# Save the preprocessed dataset as an RData object for Phase 2
+save(df_clean, file = "df_clean.RData")
+
+cat("Final dataset dimensions:", nrow(df_clean), "rows x", ncol(df_clean), "columns\n")
+glimpse(df_clean)
+```
+
+**Decision:** 
+* No features were flagged with near-zero variance, retaining all regional and categorical vectors.
+* Highly correlated features ($r > 0.85$) were checked; none exceeded this threshold, ensuring zero multicollinearity issues.
+* We saved the final dataset containing **39,409 rows** and **19 variables** as `df_clean.RData` for instant modeling in Phase 2.
+
+---
+
+*End of Phase 1 — Midterm Submission*
