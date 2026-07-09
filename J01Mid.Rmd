@@ -67,7 +67,7 @@ To comply with the requirement of loading from a public URL while ensuring immed
 
 ```{r load-data}
 # Public URL (replace this with your uploaded github raw URL)
-url <- "https://raw.githubusercontent.com/username/repo/main/DATASET/BanglaDine2024%20Bangladeshi%20Restaurant%20Industry%20Dataset/Restaurant_Spatial-Analytical.csv"
+url <- "https://raw.githubusercontent.com/MdDaudIbrahim/Data-Science-Summer-2025-2026/main/DATASET/BanglaDine2024%20Bangladeshi%20Restaurant%20Industry%20Dataset/Restaurant_Spatial-Analytical.csv"
 
 # Local path for immediate local knitting
 local_path <- "DATASET/BanglaDine2024 Bangladeshi Restaurant Industry Dataset/Restaurant_Spatial-Analytical.csv"
